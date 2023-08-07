@@ -1,10 +1,18 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const path = require("path");
+const fs = require("fs").promises;
+const Jimp = require("jimp");
 
 const { User } = require("../models/user");
 const { HttpError, ctrlWrapper } = require("../helpers");
 
 const { SECRET_KEY } = process.env;
+
+const avatarDir = path.join(__dirname, "../", "public", "avatars");
+
+const avatarSize = 250;
 
 const register = async (req, res) => {
   const { email, password, subscription } = req.body;
@@ -16,9 +24,14 @@ const register = async (req, res) => {
   }
 
   const hashPassword = await bcrypt.hash(password, 10);
+  const avatarURL = gravatar.url(email);
 
   const result = await User.create({
-    ...req.body, password: hashPassword, subscription});
+    email,
+    password: hashPassword,
+    subscription,
+    avatarURL,
+  });
 
   res.status(201).json({
     user: {
@@ -89,10 +102,40 @@ const updateSubscription = async (req, res) => {
   res.json({ result });
 };
 
+const updateAvatar = async (req, res) => {
+  if (!req.file) {
+    throw HttpError(400, "Avatar must be provided");
+  }
+  const { path: tempUpload, originalname } = req.file;
+  const { _id } = req.user;
+  const filename = `${_id}_${originalname}`;
+  const resultUpload = path.join(avatarDir, filename);
+
+  const avatarURL = path.join("avatars", filename);
+
+  await Jimp.read(tempUpload)
+    .then((avatar) => {
+      return avatar.resize(Jimp.AUTO, avatarSize).write(tempUpload);
+    })
+    .catch((err) => {
+      throw err;
+    });
+
+  await fs.rename(tempUpload, resultUpload);
+  await User.findByIdAndUpdate(_id, { avatarURL });
+  res.json({
+    user: {
+      id: _id,
+      avatarURL,
+    },
+  });
+};
+
 module.exports = {
   register: ctrlWrapper(register),
   login: ctrlWrapper(login),
   getCurrent: ctrlWrapper(getCurrent),
   logout: ctrlWrapper(logout),
   updateSubscription: ctrlWrapper(updateSubscription),
+  updateAvatar: ctrlWrapper(updateAvatar),
 };
