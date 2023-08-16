@@ -89,3 +89,4 @@ module.exports = {
   updateFavorite: ctrlWrapper(updateFavorite),
   deleteById: ctrlWrapper(deleteById),
 };
+
